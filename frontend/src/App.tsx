@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Users, 
   Calendar, 
-  DollarSign, 
+  IndianRupee, 
   Lock, 
   Unlock, 
   FileSpreadsheet, 
@@ -12,12 +12,14 @@ import {
   Trash, 
   Check, 
   X,
+  Menu,
   ChevronRight, 
   Info,
   CalendarDays,
   TrendingUp,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  ClipboardList
 } from 'lucide-react';
 import { API_BASE_URL } from './config';
 
@@ -83,10 +85,16 @@ interface MonthlySummary {
 
 export default function App() {
   // Navigation & Date contexts
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7)); // YYYY-MM
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().substring(0, 10)); // YYYY-MM-DD
   const [isCycleLocked, setIsCycleLocked] = useState<boolean>(false);
+
+  // Employee Daily report states
+  const [selectedReportEmployeeId, setSelectedReportEmployeeId] = useState<number | null>(null);
+  const [employeeReport, setEmployeeReport] = useState<any | null>(null);
+  const [reportLoading, setReportLoading] = useState<boolean>(false);
 
   // App Data State
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -147,6 +155,32 @@ export default function App() {
     }
     fetchCycleLock(selectedMonth);
   }, [selectedMonth, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'emp_reports' && selectedReportEmployeeId) {
+      fetchEmployeeReport(selectedReportEmployeeId, selectedMonth);
+    }
+  }, [activeTab, selectedReportEmployeeId, selectedMonth]);
+
+  useEffect(() => {
+    if (employees.length > 0 && selectedReportEmployeeId === null) {
+      setSelectedReportEmployeeId(employees[0].id);
+    }
+  }, [employees, selectedReportEmployeeId]);
+
+  const fetchEmployeeReport = async (empId: number, monthStr: string) => {
+    try {
+      setReportLoading(true);
+      setErrorMsg(null);
+      const res = await axios.get(`${API_BASE_URL}/api/employees/${empId}/attendance?month=${monthStr}`);
+      setEmployeeReport(res.data);
+    } catch (err: any) {
+      showToast(err.response?.data?.detail || "Could not fetch employee report.", true);
+      setEmployeeReport(null);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   // Toast alert auto-clear helper
   const showToast = (message: string, isError: boolean = false) => {
@@ -382,113 +416,150 @@ export default function App() {
     window.open(`${API_BASE_URL}/api/reports/pdf?month=${selectedMonth}`);
   };
 
+  const handleExportEmployeeExcel = () => {
+    if (selectedReportEmployeeId) {
+      window.open(`${API_BASE_URL}/api/employees/${selectedReportEmployeeId}/attendance/excel?month=${selectedMonth}`);
+    }
+  };
+
+  const handleExportEmployeePdf = () => {
+    if (selectedReportEmployeeId) {
+      window.open(`${API_BASE_URL}/api/employees/${selectedReportEmployeeId}/attendance/pdf?month=${selectedMonth}`);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#080b11] text-slate-100 font-sans">
       
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-full md:w-68 bg-[#0d121f] border-b md:border-b-0 md:border-r border-slate-800 flex flex-col">
         {/* Brand header */}
-        <div className="p-6 border-b border-slate-800 flex items-center space-x-3">
-          <div className="p-2.5 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-xl shadow-lg shadow-indigo-500/20">
-            <Sparkles className="h-5 w-5 text-white" />
+        <div className="p-4 md:p-6 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-xl shadow-lg shadow-indigo-500/20">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base md:text-lg font-bold tracking-tight text-white m-0">Payroll Ledger</h1>
+              <p className="text-[10px] text-indigo-400 font-medium uppercase tracking-wider">SuperAdmin Hub</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white m-0">Payroll Ledger</h1>
-            <p className="text-[10px] text-indigo-400 font-medium uppercase tracking-wider">SuperAdmin Hub</p>
-          </div>
+          {/* Hamburger toggle button for mobile */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-slate-400 hover:text-white focus:outline-none min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-slate-800/30 border border-slate-700/50 hover:bg-slate-850"
+            aria-label="Toggle Navigation Menu"
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
 
-        {/* Navigation list */}
-        <nav className="flex-1 p-4 space-y-1">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
-              activeTab === 'dashboard'
-                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <TrendingUp className="h-5 w-5" />
-            <span>Dashboard</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('attendance')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
-              activeTab === 'attendance'
-                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <CalendarDays className="h-5 w-5" />
-            <span>Attendance Ledger</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('employees')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
-              activeTab === 'employees'
-                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <Users className="h-5 w-5" />
-            <span>Employee Registry</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('advances')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
-              activeTab === 'advances'
-                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <DollarSign className="h-5 w-5" />
-            <span>Cash Advances</span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
-              activeTab === 'reports'
-                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-            }`}
-          >
-            <FileText className="h-5 w-5" />
-            <span>Lock & Export</span>
-          </button>
-        </nav>
+        {/* Collapsible area on mobile */}
+        <div className={`${mobileMenuOpen ? 'flex' : 'hidden'} md:flex flex-col flex-1`}>
+          {/* Navigation list */}
+          <nav className="flex-1 p-4 space-y-1">
+            <button
+              onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'dashboard'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <TrendingUp className="h-5 w-5" />
+              <span>Dashboard</span>
+            </button>
+            
+            <button
+              onClick={() => { setActiveTab('attendance'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'attendance'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <CalendarDays className="h-5 w-5" />
+              <span>Attendance Ledger</span>
+            </button>
+            
+            <button
+              onClick={() => { setActiveTab('employees'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'employees'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <Users className="h-5 w-5" />
+              <span>Employee Registry</span>
+            </button>
+            
+            <button
+              onClick={() => { setActiveTab('advances'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'advances'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <IndianRupee className="h-5 w-5" />
+              <span>Cash Advances</span>
+            </button>
+            
+            <button
+              onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'reports'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
+              <span>Lock & Export</span>
+            </button>
 
-        {/* Global Month Selection Widget at Sidebar Footer */}
-        <div className="p-4 border-t border-slate-800 bg-[#0a0e18]">
-          <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider">Active Cycle</label>
-          <div className="relative">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full bg-[#111827] text-slate-100 rounded-xl px-3 py-2 border border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
-            />
-          </div>
-          <div className="mt-2.5 flex items-center justify-between text-xs px-1">
-            <span className="text-slate-400">Lock Status:</span>
-            {isCycleLocked ? (
-              <span className="flex items-center text-amber-400 font-medium">
-                <Lock className="h-3 w-3 mr-1" /> Locked
-              </span>
-            ) : (
-              <span className="flex items-center text-emerald-400 font-medium">
-                <Unlock className="h-3 w-3 mr-1" /> Open
-              </span>
-            )}
+            <button
+              onClick={() => { setActiveTab('emp_reports'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+                activeTab === 'emp_reports'
+                  ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <ClipboardList className="h-5 w-5" />
+              <span>Employee Daily Logs</span>
+            </button>
+          </nav>
+
+          {/* Global Month Selection Widget at Sidebar Footer */}
+          <div className="p-4 border-t border-slate-800 bg-[#0a0e18]">
+            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider">Active Cycle</label>
+            <div className="relative">
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-full bg-[#111827] text-slate-100 rounded-xl px-3 py-2 border border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
+              />
+            </div>
+            <div className="mt-2.5 flex items-center justify-between text-xs px-1">
+              <span className="text-slate-400">Lock Status:</span>
+              {isCycleLocked ? (
+                <span className="flex items-center text-amber-400 font-medium">
+                  <Lock className="h-3 w-3 mr-1" /> Locked
+                </span>
+              ) : (
+                <span className="flex items-center text-emerald-400 font-medium">
+                  <Unlock className="h-3 w-3 mr-1" /> Open
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </aside>
 
       {/* MAIN CONTAINER */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl">
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
         
         {/* TOAST ALERTS */}
         {errorMsg && (
@@ -522,7 +593,7 @@ export default function App() {
               <div className="glass p-5 rounded-3xl relative overflow-hidden">
                 <div className="absolute right-0 top-0 h-24 w-24 bg-indigo-500/5 rounded-full blur-xl"></div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Monthly Payout</p>
-                <p className="text-3xl font-extrabold text-white mt-2">${summary?.total_net_payout.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || "0.00"}</p>
+                <p className="text-3xl font-extrabold text-white mt-2">₹{summary?.total_net_payout.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || "0.00"}</p>
                 <div className="mt-3 text-xs text-indigo-400 font-semibold flex items-center">
                   <TrendingUp className="h-3 w-3 mr-1" /> Aggregate of cycle base pay + tags - advances
                 </div>
@@ -540,7 +611,7 @@ export default function App() {
               <div className="glass p-5 rounded-3xl relative overflow-hidden">
                 <div className="absolute right-0 top-0 h-24 w-24 bg-emerald-500/5 rounded-full blur-xl"></div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Aggregated Extra Work</p>
-                <p className="text-3xl font-extrabold text-white mt-2">${summary?.total_extra_work.toLocaleString(undefined, {minimumFractionDigits: 2}) || "0.00"}</p>
+                <p className="text-3xl font-extrabold text-white mt-2">₹{summary?.total_extra_work.toLocaleString(undefined, {minimumFractionDigits: 2}) || "0.00"}</p>
                 <div className="mt-3 text-xs text-emerald-400 font-semibold flex items-center">
                   <Sparkles className="h-3 w-3 mr-1" /> Standard flat-rate deliverable payouts
                 </div>
@@ -549,7 +620,7 @@ export default function App() {
               <div className="glass p-5 rounded-3xl relative overflow-hidden">
                 <div className="absolute right-0 top-0 h-24 w-24 bg-amber-500/5 rounded-full blur-xl"></div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Advances Issued</p>
-                <p className="text-3xl font-extrabold text-amber-300 mt-2">-${summary?.total_advances.toLocaleString(undefined, {minimumFractionDigits: 2}) || "0.00"}</p>
+                <p className="text-3xl font-extrabold text-amber-300 mt-2">-₹{summary?.total_advances.toLocaleString(undefined, {minimumFractionDigits: 2}) || "0.00"}</p>
                 <div className="mt-3 text-xs text-amber-400 font-semibold flex items-center">
                   <Info className="h-3 w-3 mr-1" /> Instant cycle deductions/loans
                 </div>
@@ -702,7 +773,7 @@ export default function App() {
                             <td className="p-4 font-bold text-white">{log.employee.name}</td>
                             
                             {/* Rate */}
-                            <td className="p-4 text-sm text-indigo-300 font-semibold">${log.employee.hourly_rate.toFixed(2)}/hr</td>
+                            <td className="p-4 text-sm text-indigo-300 font-semibold">₹{log.employee.hourly_rate.toFixed(2)}/hr</td>
                             
                             {/* Status Indicator */}
                             <td className="p-4">
@@ -733,7 +804,7 @@ export default function App() {
 
                             {/* Base Pay Calculated */}
                             <td className="p-4 font-mono text-sm font-bold text-slate-200">
-                              ${wage.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              ₹{wage.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </td>
 
                             {/* Extra Work tags */}
@@ -743,7 +814,7 @@ export default function App() {
                                   <div className="flex flex-wrap gap-2 items-center">
                                     {log.extra_work.map((extra) => (
                                       <span key={extra.id} className="inline-flex items-center px-2.5 py-1 bg-indigo-500/10 text-indigo-300 text-xs font-bold rounded-xl border border-indigo-500/20">
-                                        <b>{extra.tag}</b>: ${extra.amount.toFixed(2)}
+                                        <b>{extra.tag}</b>: ₹{extra.amount.toFixed(2)}
                                         {!isCycleLocked && (
                                           <button
                                             onClick={() => handleDeleteExtraWork(extra.id)}
@@ -826,21 +897,36 @@ export default function App() {
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800">
                     <div>
                       <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Per-Hour Base pay</span>
-                      <span className="text-xl font-extrabold text-white mt-1">${emp.hourly_rate.toFixed(2)}</span>
+                      <span className="text-xl font-extrabold text-white mt-1">₹{emp.hourly_rate.toFixed(2)}</span>
                     </div>
                     
-                    <button
-                      onClick={() => {
-                        setCurrentEmp(emp);
-                        setNewEmpName(emp.name);
-                        setNewEmpRate(emp.hourly_rate);
-                        setNewEmpStatus(emp.is_active);
-                        setShowEditEmpModal(true);
-                      }}
-                      className="inline-flex items-center justify-center p-2 hover:bg-slate-800 rounded-xl border border-slate-700 hover:border-slate-500 text-slate-300 transition-colors min-h-[44px] min-w-[44px]"
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setSelectedReportEmployeeId(emp.id);
+                          setActiveTab('emp_reports');
+                        }}
+                        className="inline-flex items-center space-x-1.5 px-3 py-2 bg-[#1e293b] hover:bg-[#334155] text-indigo-300 rounded-xl transition-all min-h-[44px]"
+                        title="View Monthly Daily Entry Report"
+                      >
+                        <ClipboardList className="h-4.5 w-4.5" />
+                        <span className="text-xs font-bold">Logs</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setCurrentEmp(emp);
+                          setNewEmpName(emp.name);
+                          setNewEmpRate(emp.hourly_rate);
+                          setNewEmpStatus(emp.is_active);
+                          setShowEditEmpModal(true);
+                        }}
+                        className="inline-flex items-center justify-center p-2 hover:bg-slate-800 rounded-xl border border-slate-700 hover:border-slate-500 text-slate-300 transition-colors min-h-[44px] min-w-[44px]"
+                        title="Edit Configuration"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -908,13 +994,13 @@ export default function App() {
                           <td className="p-4 text-sm text-slate-300">{adv.date}</td>
                           <td className="p-4 font-mono text-sm text-slate-400">{adv.employee.employee_id}</td>
                           <td className="p-4 font-bold text-white">{adv.employee.name}</td>
-                          <td className="p-4 text-sm font-bold text-amber-400">-${adv.amount.toFixed(2)}</td>
+                          <td className="p-4 text-sm font-bold text-amber-400">-₹{adv.amount.toFixed(2)}</td>
                           <td className="p-4 text-sm text-slate-400">{adv.description || "N/A"}</td>
                           {!isCycleLocked && (
                             <td className="p-4">
                               <button
                                 onClick={() => handleDeleteAdvance(adv.id)}
-                                className="p-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl transition-colors min-h-[40px] min-w-[40px] inline-flex items-center justify-center"
+                                className="p-2 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-xl transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
                               >
                                 <Trash className="h-4 w-4" />
                               </button>
@@ -1027,30 +1113,243 @@ export default function App() {
                         {summary.items.map((item) => (
                           <tr key={item.employee_id} className="hover:bg-slate-900/30 transition-colors">
                             <td className="p-4 font-mono text-sm text-slate-300">{item.employee_id}</td>
-                            <td className="p-4 font-bold text-white">{item.name}</td>
+                            <td className="p-4 font-bold text-white">
+                              <button
+                                onClick={() => {
+                                  setSelectedReportEmployeeId(item.employee_db_id);
+                                  setActiveTab('emp_reports');
+                                }}
+                                className="hover:text-indigo-400 hover:underline text-left focus:outline-none font-bold min-h-[44px] flex items-center"
+                              >
+                                {item.name}
+                              </button>
+                            </td>
                             <td className="p-4 text-sm text-slate-300 text-right font-mono">{item.aggregate_hours.toFixed(2)}</td>
-                            <td className="p-4 text-sm text-slate-300 text-right font-mono">${item.base_pay_subtotal.toFixed(2)}</td>
-                            <td className="p-4 text-sm text-emerald-400 text-right font-mono">+${item.aggregated_extra_work.toFixed(2)}</td>
-                            <td className="p-4 text-sm text-amber-400 text-right font-mono">-${item.advance_reductions.toFixed(2)}</td>
-                            <td className="p-4 text-sm font-bold text-white text-right font-mono bg-indigo-500/5">${item.net_cash_payout.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-slate-300 text-right font-mono">₹{item.base_pay_subtotal.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-emerald-400 text-right font-mono">+₹{item.aggregated_extra_work.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-amber-400 text-right font-mono">-₹{item.advance_reductions.toFixed(2)}</td>
+                            <td className="p-4 text-sm font-bold text-white text-right font-mono bg-indigo-500/5">₹{item.net_cash_payout.toFixed(2)}</td>
                           </tr>
                         ))}
-                        {/* Totals row */}
-                        <tr className="bg-[#0c101d] font-bold border-t-2 border-slate-700">
-                          <td className="p-4 text-white uppercase text-xs">Total</td>
-                          <td className="p-4"></td>
-                          <td className="p-4 text-sm text-slate-300 text-right font-mono">{summary.total_hours.toFixed(2)}</td>
-                          <td className="p-4 text-sm text-slate-300 text-right font-mono">${summary.total_base_pay.toFixed(2)}</td>
-                          <td className="p-4 text-sm text-emerald-400 text-right font-mono">+${summary.total_extra_work.toFixed(2)}</td>
-                          <td className="p-4 text-sm text-amber-400 text-right font-mono">-${summary.total_advances.toFixed(2)}</td>
-                          <td className="p-4 text-base text-indigo-300 text-right font-mono bg-indigo-600/10">${summary.total_net_payout.toFixed(2)}</td>
-                        </tr>
+                        {/* Summary totals footer */}
+                        {summary && (
+                          <tr className="bg-slate-900/40 border-t-2 border-slate-800 font-bold">
+                            <td className="p-4 text-sm text-slate-400">TOTALS</td>
+                            <td className="p-4"></td>
+                            <td className="p-4 text-sm text-slate-300 text-right font-mono">{summary.total_hours.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-slate-300 text-right font-mono">₹{summary.total_base_pay.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-emerald-400 text-right font-mono">+₹{summary.total_extra_work.toFixed(2)}</td>
+                            <td className="p-4 text-sm text-amber-400 text-right font-mono">-₹{summary.total_advances.toFixed(2)}</td>
+                            <td className="p-4 text-base text-indigo-300 text-right font-mono bg-indigo-600/10">₹{summary.total_net_payout.toFixed(2)}</td>
+                          </tr>
+                        )}
                       </>
                     )}
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 6. EMPLOYEE MONTHLY DRILL-DOWN REPORT */}
+        {activeTab === 'emp_reports' && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-white">Employee Daily Logs</h2>
+                <p className="text-sm text-slate-400">Detailed month-level attendance, daily earnings, and adjustments tracker.</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Employee Selection Control */}
+                <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-2xl border border-slate-800">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Personnel:</label>
+                  <select
+                    value={selectedReportEmployeeId || ""}
+                    onChange={(e) => setSelectedReportEmployeeId(Number(e.target.value))}
+                    className="bg-[#111827] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px] min-w-[200px]"
+                  >
+                    <option value="" disabled>-- Select Employee --</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.employee_id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Exporter Controls */}
+                {selectedReportEmployeeId && employeeReport && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleExportEmployeeExcel}
+                      className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl transition-colors min-h-[44px]"
+                      title="Download Excel Report"
+                    >
+                      <FileSpreadsheet className="h-5 w-5" />
+                      <span className="hidden md:inline">Excel</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportEmployeePdf}
+                      className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-xl transition-colors min-h-[44px]"
+                      title="Download PDF Report"
+                    >
+                      <FileText className="h-5 w-5" />
+                      <span className="hidden md:inline">PDF</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {reportLoading ? (
+              <div className="glass p-12 text-center text-slate-400 rounded-3xl">
+                Compiling day-by-day logs for the selected individual...
+              </div>
+            ) : !employeeReport ? (
+              <div className="glass p-12 text-center text-slate-400 rounded-3xl">
+                Please select an active employee from the dropdown list to pull their ledger.
+              </div>
+            ) : (
+              <>
+                {/* Individual statistics panels */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Base Pay Rate</span>
+                    <div className="text-2xl font-extrabold text-white mt-1.5 font-mono">
+                      ₹{employeeReport.hourly_rate.toFixed(2)}/hr
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Present</span>
+                    <div className="text-2xl font-extrabold text-cyan-400 mt-1.5 font-mono">
+                      {employeeReport.days.filter((day: any) => day.status === 'Present').length} Days
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Hours Logged</span>
+                    <div className="text-2xl font-extrabold text-indigo-400 mt-1.5 font-mono">
+                      {employeeReport.total_hours.toFixed(2)} hrs
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Base Pay Subtotal</span>
+                    <div className="text-2xl font-extrabold text-slate-300 mt-1.5 font-mono">
+                      ₹{employeeReport.total_base_pay.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Extra Work Bonuses</span>
+                    <div className="text-2xl font-extrabold text-emerald-400 mt-1.5 font-mono">
+                      +₹{employeeReport.total_extra_work.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Cash Advances</span>
+                    <div className="text-2xl font-extrabold text-amber-400 mt-1.5 font-mono">
+                      -₹{employeeReport.total_advances.toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div className="glass p-5 rounded-3xl relative overflow-hidden bg-indigo-900/15 border border-indigo-500/20">
+                    <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">Net Monthly Payout</span>
+                    <div className="text-2xl font-extrabold text-white mt-1.5 font-mono">
+                      ₹{employeeReport.total_net_payout.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Day-by-day table */}
+                <div className="glass rounded-3xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-[#0c101d]">
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Calendar Date</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Status</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider text-right">Hours Logged</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider text-right">Hourly Rate</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider text-right">Base Earnings</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Extra Work Tasks</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Cash Advances</th>
+                          <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider text-right">Net Daily Payout</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {employeeReport.days.map((day: any) => (
+                          <tr key={day.date} className="hover:bg-slate-900/20 transition-colors">
+                            <td className="p-4 font-mono text-sm text-slate-300">
+                              {new Date(day.date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: '2-digit',
+                                weekday: 'short',
+                                timeZone: 'UTC'
+                              })}
+                            </td>
+                            <td className="p-4">
+                              {day.status === "Present" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  Present
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400">
+                                  Absent
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-4 text-sm text-slate-300 text-right font-mono">
+                              {day.status === "Present" ? `${day.hours_logged.toFixed(2)} hrs` : "-"}
+                            </td>
+                            <td className="p-4 text-sm text-slate-400 text-right font-mono">
+                              ₹{day.base_rate.toFixed(2)}
+                            </td>
+                            <td className="p-4 text-sm text-slate-300 text-right font-mono">
+                              ₹{day.base_pay.toFixed(2)}
+                            </td>
+                            <td className="p-4 text-sm">
+                              {day.extra_work_items.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {day.extra_work_items.map((item: any, idx: number) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/15" title={item.description}>
+                                      {item.tag} (+₹{item.amount.toFixed(2)})
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-600 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="p-4 text-sm">
+                              {day.advance_items.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {day.advance_items.map((item: any, idx: number) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/15" title={item.description}>
+                                      Loan (-₹{item.amount.toFixed(2)})
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-600 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="p-4 text-sm font-bold text-white text-right font-mono">
+                              ₹{day.net_pay.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1066,7 +1365,7 @@ export default function App() {
               <h3 className="text-lg font-bold text-white">Onboard New Personnel</h3>
               <button 
                 onClick={() => setShowAddEmpModal(false)}
-                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1098,7 +1397,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Baseline Hour Rate ($)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Baseline Hour Rate (₹)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1169,7 +1468,7 @@ export default function App() {
               <h3 className="text-lg font-bold text-white">Edit Employee Configuration</h3>
               <button 
                 onClick={() => setShowEditEmpModal(false)}
-                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1198,7 +1497,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Hourly Base Rate ($)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Hourly Base Rate (₹)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1272,7 +1571,7 @@ export default function App() {
               </h3>
               <button 
                 onClick={() => setShowExtraWorkModal(false)}
-                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1308,7 +1607,7 @@ export default function App() {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Flat Payout Amount ($)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Flat Payout Amount (₹)</label>
                 <input
                   type="number"
                   step="1"
@@ -1357,12 +1656,12 @@ export default function App() {
           <div className="glass max-w-md w-full p-6 rounded-3xl space-y-4 animate-scale-in">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-lg font-bold text-white flex items-center">
-                <DollarSign className="h-5 w-5 mr-2 text-indigo-400" />
+                <IndianRupee className="h-5 w-5 mr-2 text-indigo-400" />
                 <span>Document Cash Advance</span>
               </h3>
               <button 
                 onClick={() => setShowAdvanceModal(false)}
-                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center"
+                className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1394,7 +1693,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Advance Amount ($)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Advance Amount (₹)</label>
                 <input
                   type="number"
                   step="1"

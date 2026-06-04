@@ -126,3 +126,38 @@ class MonthlySummaryResponse(BaseModel):
     total_extra_work: float
     total_advances: float
     total_net_payout: float
+
+
+# Employee Daily Report for Month Schemas
+class ExtraWorkReportItem(BaseModel):
+    tag: str
+    amount: float
+    description: Optional[str] = None
+
+class CashAdvanceReportItem(BaseModel):
+    amount: float
+    description: Optional[str] = None
+
+class EmployeeMonthlyReportDay(BaseModel):
+    date: date
+    status: str
+    hours_logged: float
+    base_rate: float
+    base_pay: float
+    extra_work_amount: float
+    extra_work_items: List[ExtraWorkReportItem] = []
+    advance_amount: float
+    advance_items: List[CashAdvanceReportItem] = []
+    net_pay: float
+
+class EmployeeMonthlyReportResponse(BaseModel):
+    employee_id: str
+    name: str
+    hourly_rate: float
+    month: str
+    days: List[EmployeeMonthlyReportDay]
+    total_hours: float
+    total_base_pay: float
+    total_extra_work: float
+    total_advances: float
+    total_net_payout: float

@@ -1,73 +1,70 @@
-# React + TypeScript + Vite
+# React + Vite Frontend Interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The frontend provides a premium, touch-optimized admin panel styled with a dark glassmorphic design and featuring oversized target controls (minimum 44x44px) for rapid tablet entry.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🛠️ Styling & Tech Stack
 
-## React Compiler
+* **Framework**: React 18+
+* **Build System**: Vite
+* **Language**: TypeScript
+* **Styling**: Tailwind CSS v4 (configured via `@import "tailwindcss"` in `src/index.css`)
+* **Typography**: Outfit & Inter Google Fonts (configured in the CSS `@theme` directive)
+* **Icons**: `lucide-react`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## ⚙️ Configuration & API Integration
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+The frontend routes API calls to the backend base URL defined in `src/config.ts`.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+You can set this dynamically using environment variables or a `.env` file in the frontend folder:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+*For production deployment, create a `.env.production` file pointing to the AWS EC2 or Supabase FastAPI URL.*
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🚀 Running the Frontend Separately
+
+1. Navigate to the frontend directory:
+   ```bash
+   cd ~/Desktop/Project_AI/Payroll/frontend
+   ```
+2. Install npm packages:
+   ```bash
+   npm install
+   ```
+3. Run the Vite development server:
+   ```bash
+   npm run dev
+   ```
+4. Build the production package (compiles TypeScript and bundles code):
+   ```bash
+   npm run build
+   ```
+
+---
+
+## 🖥️ Modular Administrative Views
+
+The application UI is structured into five distinct administrative sections:
+
+### 1. Dashboard Overview
+Displays real-time KPIs for the active month (Net Monthly Payout, Base Hours, Extra Work, Advances) alongside Quick Action cards for hard-locking and document exports.
+
+### 2. Attendance Ledger
+A daily timesheet view with automatic `Present` status updates when hours are logged. Integrates an "Add Tag" popover modal to assign flat-rate work bonuses (e.g. Husk Packing, Rice delivery, or custom names).
+
+### 3. Employee Registry
+Manage worker credentials, hourly baseline rates, and toggles to active/inactive status.
+
+### 4. Cash Advances
+Document cash advances issued to employees in the current cycle. Features an interactive list to track loan records and void erroneous advances.
+
+### 5. Lock & Export
+Inspects calculated summary matrices of all registered employees for the active cycle and triggers downloads of Excel sheets (`.xlsx`) or print-ready PDF registers/vouchers (`.pdf`).
