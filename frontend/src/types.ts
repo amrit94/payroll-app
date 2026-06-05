@@ -56,3 +56,11 @@ export interface MonthlySummary {
   total_advances: number;
   total_net_payout: number;
 }
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOCK' | 'ERROR';
+  entity: 'Employee' | 'Attendance' | 'Cash Advance' | 'Cycle';
+  message: string;
+}

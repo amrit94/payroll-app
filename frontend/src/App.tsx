@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { AlertTriangle, Check } from 'lucide-react';
 import { API_BASE_URL } from './config';
-
 // Import Types
-import type { Employee, Attendance, CashAdvanceDetail, MonthlySummary } from './types';
+import type { Employee, Attendance, CashAdvanceDetail, MonthlySummary, ActivityLog } from './types';
 
 // Import Components
 import Sidebar from './components/Sidebar';
@@ -14,13 +13,13 @@ import EmployeeRegistryView from './components/EmployeeRegistryView';
 import CashAdvancesLedgerView from './components/CashAdvancesLedgerView';
 import MonthlySummaryView from './components/MonthlySummaryView';
 import EmployeeDailyLogsView from './components/EmployeeDailyLogsView';
+import ActivitySidebar from './components/ActivitySidebar';
 import { 
   AddEmployeeModal, 
   EditEmployeeModal, 
   AddExtraWorkModal, 
   AddAdvanceModal 
 } from './components/Modals';
-
 export default function App() {
   // Navigation & Date contexts
   const getTabFromHash = (): 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' => {
@@ -109,15 +108,33 @@ export default function App() {
   const [advDate, setAdvDate] = useState(new Date().toISOString().substring(0, 10));
   const [advAmount, setAdvAmount] = useState<number>(0);
   const [advDesc, setAdvDesc] = useState('');
-
   // General feedback messages
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // Live Audit Mutation Logs State
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+
+  const addMutationLog = (message: string, action: ActivityLog['action'], entity: ActivityLog['entity']) => {
+    if (action === 'ERROR') {
+      const newLog: ActivityLog = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        action,
+        entity,
+        message
+      };
+      setActivityLogs(prev => [newLog, ...prev]);
+    } else {
+      fetchAuditLogs();
+    }
+  };
+
   // Fetch initial data & react to context changes
   useEffect(() => {
     fetchEmployees();
+    fetchAuditLogs();
   }, []);
 
   useEffect(() => {
@@ -187,6 +204,34 @@ export default function App() {
     }
   };
 
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/audit-logs`);
+      const formattedLogs: ActivityLog[] = res.data.map((log: any) => {
+        const parsedDate = new Date(log.timestamp.endsWith('Z') ? log.timestamp : log.timestamp + 'Z');
+        return {
+          id: String(log.id),
+          action: log.action,
+          entity: log.entity,
+          message: log.message,
+          timestamp: parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        };
+      });
+      setActivityLogs(formattedLogs);
+    } catch (err) {
+      console.error("Failed to fetch audit logs", err);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    try {
+      await axios.delete(`${API_BASE_URL}/api/audit-logs`);
+      fetchAuditLogs();
+    } catch (err) {
+      showToast("Failed to clear audit logs in database", true);
+    }
+  };
+
   const fetchCycleLock = async (month: string) => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/cycles/${month}`);
@@ -249,6 +294,7 @@ export default function App() {
         is_active: newEmpStatus
       });
       showToast("New employee successfully onboarded");
+      addMutationLog(`Onboarded employee '${newEmpName}' (${newEmpId}) with hourly rate ₹${newEmpRate.toFixed(2)}`, 'CREATE', 'Employee');
       setShowAddEmpModal(false);
       // Reset state
       setNewEmpId('');
@@ -257,7 +303,9 @@ export default function App() {
       setNewEmpStatus(true);
       fetchEmployees();
     } catch (err: any) {
-      showToast(err.response?.data?.detail || "Error onboarding employee", true);
+      const errMsg = err.response?.data?.detail || "Error onboarding employee";
+      showToast(errMsg, true);
+      addMutationLog(`Failed to onboard employee '${newEmpName}': ${errMsg}`, 'ERROR', 'Employee');
     }
   };
 
@@ -271,11 +319,14 @@ export default function App() {
         is_active: newEmpStatus
       });
       showToast("Employee details updated successfully");
+      addMutationLog(`Updated profile config for '${newEmpName}' (${currentEmp.employee_id})`, 'UPDATE', 'Employee');
       setShowEditEmpModal(false);
       setCurrentEmp(null);
       fetchEmployees();
     } catch (err: any) {
-      showToast(err.response?.data?.detail || "Error updating employee profile", true);
+      const errMsg = err.response?.data?.detail || "Error updating employee profile";
+      showToast(errMsg, true);
+      addMutationLog(`Failed to update employee '${newEmpName}': ${errMsg}`, 'ERROR', 'Employee');
     }
   };
 
@@ -288,10 +339,19 @@ export default function App() {
         date: selectedDate,
         hours_logged: hoursNum
       });
+      const emp = employees.find(e => e.id === employeeId);
+      const empName = emp ? emp.name : `ID ${employeeId}`;
+      const empUid = emp ? emp.employee_id : '';
+      const actionMsg = hoursNum === null ? "set Absent" : `set to ${hoursNum.toFixed(2)} hrs`;
+      addMutationLog(`Recorded attendance for ${empName} (${empUid}): ${actionMsg} on ${selectedDate}`, 'UPDATE', 'Attendance');
       // Soft refresh local attendance array
       fetchAttendance(selectedDate);
     } catch (err: any) {
-      showToast(err.response?.data?.detail || "Error recording hours. Check lock state.", true);
+      const emp = employees.find(e => e.id === employeeId);
+      const empName = emp ? emp.name : `ID ${employeeId}`;
+      const errMsg = err.response?.data?.detail || "Error recording hours. Check lock state.";
+      showToast(errMsg, true);
+      addMutationLog(`Failed to update attendance for ${empName}: ${errMsg}`, 'ERROR', 'Attendance');
     }
   };
 
@@ -321,10 +381,15 @@ export default function App() {
         description: extraWorkDesc || undefined
       });
       showToast("Bonus extra work tag successfully allocated.");
+      const targetAtt = attendance.find(a => a.id === activeAttendanceId);
+      const empName = targetAtt ? targetAtt.employee.name : 'Unknown';
+      addMutationLog(`Allocated '${finalTag}' tag bonus (+₹${extraWorkAmount}) for ${empName} on ${selectedDate}`, 'CREATE', 'Attendance');
       setShowExtraWorkModal(false);
       fetchAttendance(selectedDate);
     } catch (err: any) {
-      showToast(err.response?.data?.detail || "Failed to append extra work tag. Verify present status.", true);
+      const errMsg = err.response?.data?.detail || "Failed to append extra work tag. Verify present status.";
+      showToast(errMsg, true);
+      addMutationLog(`Failed to allocate extra work bonus: ${errMsg}`, 'ERROR', 'Attendance');
     }
   };
 
@@ -333,9 +398,12 @@ export default function App() {
       try {
         await axios.delete(`${API_BASE_URL}/api/attendance/extra-work/${extraId}`);
         showToast("Extra work bonus removed.");
+        addMutationLog(`Removed extra work tag bonus allocation ID ${extraId}`, 'DELETE', 'Attendance');
         fetchAttendance(selectedDate);
       } catch (err: any) {
-        showToast(err.response?.data?.detail || "Failed to delete extra work record", true);
+        const errMsg = err.response?.data?.detail || "Failed to delete extra work record";
+        showToast(errMsg, true);
+        addMutationLog(`Failed to delete extra work bonus ID ${extraId}: ${errMsg}`, 'ERROR', 'Attendance');
       }
     }
   };
@@ -354,13 +422,18 @@ export default function App() {
         description: advDesc || undefined
       });
       showToast("Cash advance transactions documented persistently.");
+      const emp = employees.find(e => e.id === advEmployeeId);
+      const empName = emp ? emp.name : `ID ${advEmployeeId}`;
+      addMutationLog(`Issued ₹${advAmount.toFixed(2)} cash advance to ${empName} on ${advDate}`, 'CREATE', 'Cash Advance');
       setShowAdvanceModal(false);
       // Reset forms
       setAdvAmount(0);
       setAdvDesc('');
       fetchAdvances(selectedMonth);
     } catch (err: any) {
-      showToast(err.response?.data?.detail || "Failed to register advance. Month may be locked.", true);
+      const errMsg = err.response?.data?.detail || "Failed to register advance. Month may be locked.";
+      showToast(errMsg, true);
+      addMutationLog(`Failed to issue cash advance: ${errMsg}`, 'ERROR', 'Cash Advance');
     }
   };
 
@@ -369,9 +442,12 @@ export default function App() {
       try {
         await axios.delete(`${API_BASE_URL}/api/advances/${advId}`);
         showToast("Advance transaction voided.");
+        addMutationLog(`Voided cash advance transaction record ID ${advId}`, 'DELETE', 'Cash Advance');
         fetchAdvances(selectedMonth);
       } catch (err: any) {
-        showToast(err.response?.data?.detail || "Failed to delete cash advance", true);
+        const errMsg = err.response?.data?.detail || "Failed to delete cash advance";
+        showToast(errMsg, true);
+        addMutationLog(`Failed to void cash advance ID ${advId}: ${errMsg}`, 'ERROR', 'Cash Advance');
       }
     }
   };
@@ -383,10 +459,13 @@ export default function App() {
           month: selectedMonth
         });
         showToast("Payroll cycle locked successfully. All historical sheets are now read-only.");
+        addMutationLog(`Finalized and locked payroll cycle for month cycle ${selectedMonth}`, 'LOCK', 'Cycle');
         setIsCycleLocked(true);
         fetchSummary(selectedMonth);
       } catch (err: any) {
-        showToast(err.response?.data?.detail || "Failed to lock cycle", true);
+        const errMsg = err.response?.data?.detail || "Failed to lock cycle";
+        showToast(errMsg, true);
+        addMutationLog(`Failed to lock cycle ${selectedMonth}: ${errMsg}`, 'LOCK', 'Cycle');
       }
     }
   };
@@ -531,6 +610,12 @@ export default function App() {
         )}
 
       </main>
+
+      {/* RIGHT AUDIT SIDEBAR */}
+      <ActivitySidebar 
+        logs={activityLogs} 
+        onClearLogs={handleClearLogs} 
+      />
 
       {/* --- MODAL DIALOGS --- */}
 

@@ -380,3 +380,17 @@ def export_employee_pdf_report(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# --- AUDIT LOGS API ROUTES ---
+
+@app.get("/api/audit-logs", response_model=List[schemas.AuditLogOut])
+def get_audit_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
+    """Retrieve database mutation audit logs."""
+    return crud.get_audit_logs(db, skip=skip, limit=limit)
+
+@app.delete("/api/audit-logs")
+def clear_audit_logs(db: Session = Depends(get_db)):
+    """Clear all database mutation audit logs."""
+    crud.clear_audit_logs(db)
+    return {"message": "Audit logs cleared successfully"}

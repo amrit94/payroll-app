@@ -1,5 +1,50 @@
+import type React from 'react';
+import { useState, useEffect } from 'react';
 import { Lock, Plus, X } from 'lucide-react';
 import type { Attendance } from '../types';
+
+interface HoursInputProps {
+  initialValue: number | null;
+  onSave: (val: string) => void;
+  disabled: boolean;
+}
+
+function HoursInput({ initialValue, onSave, disabled }: HoursInputProps) {
+  const [value, setValue] = useState<string>(initialValue === null ? '' : String(initialValue));
+
+  useEffect(() => {
+    setValue(initialValue === null ? '' : String(initialValue));
+  }, [initialValue]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      onSave(value);
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  return (
+    <div className="relative group/input flex flex-col items-center">
+      <input
+        type="number"
+        step="0.5"
+        min="0"
+        max="24"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        placeholder="0.00"
+        className="w-24 bg-[#111827] text-slate-200 border border-slate-700 rounded-xl px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
+      />
+      {!disabled && (
+        <span className="absolute -bottom-4 left-0 w-full text-center text-[9px] text-slate-500 opacity-0 group-focus-within/input:opacity-100 transition-opacity">
+          Press Enter ↵
+        </span>
+      )}
+    </div>
+  );
+}
 
 interface AttendanceLedgerViewProps {
   selectedDate: string;
@@ -59,7 +104,7 @@ export default function AttendanceLedgerView({
                 <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Name</th>
                 <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Base Rate</th>
                 <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">State status</th>
-                <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider w-40">Hours Logged</th>
+                <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider w-40 text-center">Hours Logged</th>
                 <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider w-48">Daily Base Wages</th>
                 <th className="p-4 text-xs uppercase font-bold text-slate-400 tracking-wider">Extra Work Flat Bonuses</th>
               </tr>
@@ -102,17 +147,11 @@ export default function AttendanceLedgerView({
                       </td>
                       
                       {/* Input Hours */}
-                      <td className="p-4">
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="24"
-                          value={log.hours_logged === null ? "" : log.hours_logged}
-                          onChange={(e) => handleAttendanceChange(log.employee.id, e.target.value)}
+                      <td className="p-4 flex justify-center">
+                        <HoursInput
+                          initialValue={log.hours_logged}
+                          onSave={(val) => handleAttendanceChange(log.employee.id, val)}
                           disabled={isCycleLocked}
-                          placeholder="0.00"
-                          className="w-24 bg-[#111827] text-slate-200 border border-slate-700 rounded-xl px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
                         />
                       </td>
 

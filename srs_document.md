@@ -113,3 +113,8 @@ Because the system frontend and backend platforms operate on separate domain sys
                                               │ (Free Postgres)│
                                               └────────────────┘
 ```
+
+
+## Additional
+1. Create a seperate tab to see an employee monthly log listed on daily basis
+2. Any changes to the database, keep log of it with old and new vlaue along with data and on the right sidebar should display the logs

@@ -161,3 +161,21 @@ class EmployeeMonthlyReportResponse(BaseModel):
     total_extra_work: float
     total_advances: float
     total_net_payout: float
+
+
+class AuditLogBase(BaseModel):
+    action: str
+    entity: str
+    message: str
+
+
+class AuditLogCreate(AuditLogBase):
+    pass
+
+
+class AuditLogOut(AuditLogBase):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
