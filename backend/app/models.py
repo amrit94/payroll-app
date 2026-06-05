@@ -77,3 +77,29 @@ class AuditLog(Base):
     action = Column(String, nullable=False) # "CREATE", "UPDATE", "DELETE", "LOCK", "ERROR"
     entity = Column(String, nullable=False) # "Employee", "Attendance", "Cash Advance", "Cycle"
     message = Column(String, nullable=False)
+
+
+class PaddySupplier(Base):
+    __tablename__ = "paddy_suppliers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    contact_number = Column(String, nullable=False)
+    location = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    deliveries = relationship("PaddyDelivery", back_populates="supplier", cascade="all, delete-orphan")
+
+
+class PaddyDelivery(Base):
+    __tablename__ = "paddy_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("paddy_suppliers.id", ondelete="CASCADE"), nullable=False)
+    delivery_date = Column(Date, nullable=False)
+    variety = Column(String, nullable=False)
+    weight = Column(Float, nullable=False) # Net Payload Weight in Quintals
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    supplier = relationship("PaddySupplier", back_populates="deliveries")

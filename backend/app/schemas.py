@@ -179,3 +179,66 @@ class AuditLogOut(AuditLogBase):
 
     class Config:
         from_attributes = True
+
+
+# Paddy Supplier & Delivery Schemas
+class PaddySupplierBase(BaseModel):
+    name: str = Field(..., description="Full Legal Name")
+    contact_number: str = Field(..., description="Primary Contact Number")
+    location: str = Field(..., description="Village / Regional Location")
+
+class PaddySupplierCreate(PaddySupplierBase):
+    pass
+
+class PaddySupplierUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_number: Optional[str] = None
+    location: Optional[str] = None
+
+class PaddyDeliveryBase(BaseModel):
+    delivery_date: date = Field(..., description="Delivery Date")
+    variety: str = Field(..., description="Paddy Variety/Classification")
+    weight: float = Field(..., ge=0, description="Net Payload Weight in Quintals")
+
+class PaddyDeliveryCreate(PaddyDeliveryBase):
+    pass
+
+class PaddyDeliveryOut(PaddyDeliveryBase):
+    id: int
+    supplier_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PaddySupplierOut(PaddySupplierBase):
+    id: int
+    supplier_id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PaddySupplierDetailOut(PaddySupplierOut):
+    deliveries: List[PaddyDeliveryOut] = []
+
+    class Config:
+        from_attributes = True
+
+class YoYComparisonItem(BaseModel):
+    year: int
+    deliveries_count: int
+    aggregate_weight: float
+    variance_percentage: Optional[float] = None # Null if baseline
+
+class PaddySupplierYoYReport(BaseModel):
+    supplier_id: str
+    name: str
+    active_year: int
+    active_deliveries_count: int
+    active_cumulative_weight: float
+    yoy_grid: List[YoYComparisonItem]
+
+class PaddyProcurementAnalytics(BaseModel):
+    active_year: int
+    total_combined_volume: float # Total weight accepted across all suppliers for current year

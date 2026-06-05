@@ -10,12 +10,13 @@ import {
   FileText, 
   ClipboardList, 
   Lock, 
-  Unlock 
+  Unlock,
+  Wheat
 } from 'lucide-react';
 
 interface SidebarProps {
-  activeTab: 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports';
-  setActiveTab: (tab: 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports') => void;
+  activeTab: 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' | 'paddy_vendors' | 'paddy_compare';
+  setActiveTab: (tab: 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' | 'paddy_vendors' | 'paddy_compare') => void;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
   selectedMonth: string;
@@ -129,6 +130,18 @@ export default function Sidebar({
           >
             <ClipboardList className="h-5 w-5" />
             <span>Employee Daily Logs</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('paddy_vendors'); setMobileMenuOpen(false); }}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-left min-h-[44px] ${
+              activeTab === 'paddy_vendors' || activeTab === 'paddy_compare'
+                ? 'bg-gradient-to-r from-indigo-600/20 to-violet-600/10 text-indigo-300 border-l-4 border-indigo-500 font-medium'
+                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+            }`}
+          >
+            <Wheat className="h-5 w-5" />
+            <span>Paddy Procurement</span>
           </button>
         </nav>
 

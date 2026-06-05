@@ -24,6 +24,31 @@ try:
         ]
         db.add_all(seed_employees)
         db.commit()
+
+    if db.query(models.PaddySupplier).count() == 0:
+        s1 = models.PaddySupplier(supplier_id="SUP-0001", name="Haran Borah", contact_number="9876543210", location="Kharupetia")
+        s2 = models.PaddySupplier(supplier_id="SUP-0002", name="Bipul Saikia", contact_number="8765432109", location="Dhing")
+        s3 = models.PaddySupplier(supplier_id="SUP-0003", name="Madan Mohan", contact_number="7654321098", location="Morigaon")
+        db.add_all([s1, s2, s3])
+        db.commit()
+        db.refresh(s1)
+        db.refresh(s2)
+        db.refresh(s3)
+
+        d1 = models.PaddyDelivery(supplier_id=s1.id, delivery_date=date(2024, 11, 12), variety="Ranjit", weight=120.0)
+        d2 = models.PaddyDelivery(supplier_id=s1.id, delivery_date=date(2025, 5, 15), variety="Mota", weight=135.0)
+        d3 = models.PaddyDelivery(supplier_id=s1.id, delivery_date=date(2025, 11, 20), variety="Ranjit", weight=140.0)
+        d4 = models.PaddyDelivery(supplier_id=s1.id, delivery_date=date(2026, 5, 10), variety="Ranjit", weight=155.0)
+
+        d5 = models.PaddyDelivery(supplier_id=s2.id, delivery_date=date(2024, 10, 5), variety="Goya", weight=80.0)
+        d6 = models.PaddyDelivery(supplier_id=s2.id, delivery_date=date(2025, 11, 1), variety="Goya", weight=85.0)
+        d7 = models.PaddyDelivery(supplier_id=s2.id, delivery_date=date(2026, 5, 22), variety="Mota", weight=90.0)
+
+        d8 = models.PaddyDelivery(supplier_id=s3.id, delivery_date=date(2025, 10, 18), variety="Ranjit", weight=210.0)
+        d9 = models.PaddyDelivery(supplier_id=s3.id, delivery_date=date(2026, 4, 12), variety="Ranjit", weight=220.0)
+
+        db.add_all([d1, d2, d3, d4, d5, d6, d7, d8, d9])
+        db.commit()
 finally:
     db.close()
 
@@ -394,3 +419,61 @@ def clear_audit_logs(db: Session = Depends(get_db)):
     """Clear all database mutation audit logs."""
     crud.clear_audit_logs(db)
     return {"message": "Audit logs cleared successfully"}
+
+
+# --- PADDY SUPPLIER & PROCUREMENT API ROUTES ---
+
+@app.get("/api/paddy/suppliers", response_model=List[schemas.PaddySupplierDetailOut])
+def get_paddy_suppliers(db: Session = Depends(get_db)):
+    """Retrieve all registered paddy suppliers."""
+    return crud.get_paddy_suppliers(db)
+
+@app.get("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierDetailOut)
+def get_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
+    """Retrieve details for a specific paddy supplier, including deliveries."""
+    db_supplier = crud.get_paddy_supplier(db, supplier_id)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return db_supplier
+
+@app.post("/api/paddy/suppliers", response_model=schemas.PaddySupplierOut, status_code=status.HTTP_201_CREATED)
+def create_paddy_supplier(supplier: schemas.PaddySupplierCreate, db: Session = Depends(get_db)):
+    """Register a new paddy supplier."""
+    return crud.create_paddy_supplier(db, supplier)
+
+@app.put("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierOut)
+def update_paddy_supplier(supplier_id: int, supplier: schemas.PaddySupplierUpdate, db: Session = Depends(get_db)):
+    """Update details of a registered paddy supplier."""
+    db_supplier = crud.update_paddy_supplier(db, supplier_id, supplier)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return db_supplier
+
+@app.delete("/api/paddy/suppliers/{supplier_id}")
+def delete_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
+    """Deregister a paddy supplier and remove their profile."""
+    success = crud.delete_paddy_supplier(db, supplier_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return {"message": "Supplier deregistered successfully"}
+
+@app.post("/api/paddy/suppliers/{supplier_id}/deliveries", response_model=schemas.PaddyDeliveryOut, status_code=status.HTTP_201_CREATED)
+def create_paddy_delivery(supplier_id: int, delivery: schemas.PaddyDeliveryCreate, db: Session = Depends(get_db)):
+    """Log a seasonal crop delivery for a supplier (quantity-only)."""
+    return crud.create_paddy_delivery(db, supplier_id, delivery)
+
+@app.delete("/api/paddy/deliveries/{delivery_id}")
+def delete_paddy_delivery(delivery_id: int, db: Session = Depends(get_db)):
+    """Void or remove a recorded paddy crop delivery."""
+    crud.delete_paddy_delivery(db, delivery_id)
+    return {"message": "Delivery record removed successfully"}
+
+@app.get("/api/paddy/analytics", response_model=schemas.PaddyProcurementAnalytics)
+def get_paddy_procurement_analytics(db: Session = Depends(get_db)):
+    """Compile real-time total volume statistics for the active year."""
+    return crud.get_paddy_procurement_analytics(db)
+
+@app.get("/api/paddy/suppliers/{supplier_id}/yoy", response_model=schemas.PaddySupplierYoYReport)
+def get_paddy_supplier_yoy_report(supplier_id: int, db: Session = Depends(get_db)):
+    """Generate the Year-over-Year Historical Comparison and Trend report for a supplier."""
+    return crud.get_paddy_supplier_yoy_report(db, supplier_id)

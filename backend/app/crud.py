@@ -362,3 +362,205 @@ def clear_audit_logs(db: Session) -> bool:
     db.query(models.AuditLog).delete()
     db.commit()
     return True
+
+
+# --- PADDY SUPPLIER & PROCUREMENT OPERATIONS ---
+
+def get_paddy_suppliers(db: Session, skip: int = 0, limit: int = 100) -> List[models.PaddySupplier]:
+    return db.query(models.PaddySupplier).offset(skip).limit(limit).all()
+
+def get_paddy_supplier(db: Session, supplier_db_id: int) -> Optional[models.PaddySupplier]:
+    return db.query(models.PaddySupplier).filter(models.PaddySupplier.id == supplier_db_id).first()
+
+def create_paddy_supplier(db: Session, supplier: schemas.PaddySupplierCreate) -> models.PaddySupplier:
+    max_id = db.query(models.PaddySupplier.id).order_by(models.PaddySupplier.id.desc()).first()
+    next_val = (max_id[0] + 1) if max_id else 1
+    supplier_id = f"SUP-{next_val:04d}"
+
+    db_supplier = models.PaddySupplier(
+        supplier_id=supplier_id,
+        name=supplier.name,
+        contact_number=supplier.contact_number,
+        location=supplier.location
+    )
+    db.add(db_supplier)
+    db.commit()
+    db.refresh(db_supplier)
+    
+    create_audit_log(
+        db, 
+        "CREATE", 
+        "Supplier", 
+        f"Registered paddy supplier '{supplier.name}' ({supplier_id}) from Location: {supplier.location}, Contact: {supplier.contact_number}"
+    )
+    return db_supplier
+
+def update_paddy_supplier(db: Session, supplier_db_id: int, supplier_update: schemas.PaddySupplierUpdate) -> Optional[models.PaddySupplier]:
+    db_supplier = get_paddy_supplier(db, supplier_db_id)
+    if not db_supplier:
+        return None
+    
+    old_name = db_supplier.name
+    old_contact = db_supplier.contact_number
+    old_location = db_supplier.location
+
+    update_data = supplier_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_supplier, key, value)
+    
+    db.commit()
+    db.refresh(db_supplier)
+
+    changes = []
+    if "name" in update_data and update_data["name"] != old_name:
+        changes.append(f"Name from '{old_name}' to '{db_supplier.name}'")
+    if "contact_number" in update_data and update_data["contact_number"] != old_contact:
+        changes.append(f"Contact from '{old_contact}' to '{db_supplier.contact_number}'")
+    if "location" in update_data and update_data["location"] != old_location:
+        changes.append(f"Location from '{old_location}' to '{db_supplier.location}'")
+    
+    changes_str = ", ".join(changes) if changes else "No supplier details changes detected"
+    create_audit_log(
+        db, 
+        "UPDATE", 
+        "Supplier", 
+        f"Updated supplier registry configuration for '{db_supplier.name}' ({db_supplier.supplier_id}): {changes_str}"
+    )
+    return db_supplier
+
+def delete_paddy_supplier(db: Session, supplier_db_id: int) -> bool:
+    db_supplier = get_paddy_supplier(db, supplier_db_id)
+    if not db_supplier:
+        return False
+    
+    supplier_name = db_supplier.name
+    supplier_id = db_supplier.supplier_id
+    db.delete(db_supplier)
+    db.commit()
+    
+    create_audit_log(
+        db, 
+        "DELETE", 
+        "Supplier", 
+        f"Deregistered paddy supplier '{supplier_name}' ({supplier_id})"
+    )
+    return True
+
+def create_paddy_delivery(db: Session, supplier_db_id: int, delivery: schemas.PaddyDeliveryCreate) -> models.PaddyDelivery:
+    db_supplier = get_paddy_supplier(db, supplier_db_id)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    
+    db_delivery = models.PaddyDelivery(
+        supplier_id=supplier_db_id,
+        delivery_date=delivery.delivery_date,
+        variety=delivery.variety,
+        weight=delivery.weight
+    )
+    db.add(db_delivery)
+    db.commit()
+    db.refresh(db_delivery)
+
+    create_audit_log(
+        db, 
+        "CREATE", 
+        "Delivery", 
+        f"Logged paddy crop delivery for '{db_supplier.name}' ({db_supplier.supplier_id}): {delivery.weight:.2f} Quintals of {delivery.variety} on {delivery.delivery_date}"
+    )
+    return db_delivery
+
+def delete_paddy_delivery(db: Session, delivery_id: int) -> bool:
+    db_delivery = db.query(models.PaddyDelivery).filter(models.PaddyDelivery.id == delivery_id).first()
+    if not db_delivery:
+        raise HTTPException(status_code=404, detail="Delivery record not found")
+    
+    supplier_name = db_delivery.supplier.name if db_delivery.supplier else "Unknown"
+    supplier_id = db_delivery.supplier.supplier_id if db_delivery.supplier else "Unknown"
+    weight_val = db_delivery.weight
+    variety_name = db_delivery.variety
+    del_date = db_delivery.delivery_date
+
+    db.delete(db_delivery)
+    db.commit()
+
+    create_audit_log(
+        db, 
+        "DELETE", 
+        "Delivery", 
+        f"Voided paddy crop delivery from '{supplier_name}' ({supplier_id}): removed {weight_val:.2f} Quintals of {variety_name} on {del_date}"
+    )
+    return True
+
+def get_paddy_procurement_analytics(db: Session) -> schemas.PaddyProcurementAnalytics:
+    active_year = datetime.now().year
+    
+    total_volume_query = db.query(models.PaddyDelivery).filter(
+        extract('year', models.PaddyDelivery.delivery_date) == active_year
+    ).all()
+    
+    total_volume = sum(d.weight for d in total_volume_query)
+    
+    return schemas.PaddyProcurementAnalytics(
+        active_year=active_year,
+        total_combined_volume=total_volume
+    )
+
+def get_paddy_supplier_yoy_report(db: Session, supplier_db_id: int) -> schemas.PaddySupplierYoYReport:
+    db_supplier = get_paddy_supplier(db, supplier_db_id)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    
+    active_year = datetime.now().year
+    deliveries = db_supplier.deliveries
+    
+    yearly_data = {}
+    for d in deliveries:
+        year = d.delivery_date.year
+        yearly_data.setdefault(year, []).append(d)
+        
+    years = sorted(list(yearly_data.keys()), reverse=True)
+    if active_year not in years:
+        years.insert(0, active_year)
+        yearly_data[active_year] = []
+
+    yoy_grid = []
+    weights_by_year = {}
+    for y in years:
+        weights_by_year[y] = sum(d.weight for d in yearly_data.get(y, []))
+        
+    for y in years:
+        d_list = yearly_data.get(y, [])
+        agg_weight = weights_by_year[y]
+        prior_year = y - 1
+        
+        if prior_year in weights_by_year:
+            prior_weight = weights_by_year[prior_year]
+        else:
+            prior_deliveries = db.query(models.PaddyDelivery).filter(
+                models.PaddyDelivery.supplier_id == supplier_db_id,
+                extract('year', models.PaddyDelivery.delivery_date) == prior_year
+            ).all()
+            prior_weight = sum(d.weight for d in prior_deliveries)
+            
+        variance = None
+        if prior_weight > 0:
+            variance = ((agg_weight - prior_weight) / prior_weight) * 100
+            
+        yoy_grid.append(schemas.YoYComparisonItem(
+            year=y,
+            deliveries_count=len(d_list),
+            aggregate_weight=agg_weight,
+            variance_percentage=variance
+        ))
+
+    active_d = yearly_data.get(active_year, [])
+    active_weight = weights_by_year.get(active_year, 0.0)
+
+    return schemas.PaddySupplierYoYReport(
+        supplier_id=db_supplier.supplier_id,
+        name=db_supplier.name,
+        active_year=active_year,
+        active_deliveries_count=len(active_d),
+        active_cumulative_weight=active_weight,
+        yoy_grid=yoy_grid
+    )

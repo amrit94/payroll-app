@@ -1,6 +1,6 @@
 # Software Requirements Specification (SRS)
 
-## Project: Payroll Management Application
+# 1. Project: Payroll Management Application
 **Version:** 3.0 (Decoupled Infrastructure Edition)  
 **Date:** June 4, 2026  
 
@@ -115,6 +115,53 @@ Because the system frontend and backend platforms operate on separate domain sys
 ```
 
 
-## Additional
+# 2. Paddy Procurement & Supplier Management
+**System Base:** Web Application (Decoupled Vercel + AWS EC2 Stack)  
+**Version:** 4.0 (Extension Module Blueprint)  
+**Date:** June 5, 2026  
+
+---
+
+## 1. Objective & Scope
+
+This specification details the structural requirements to expand the functional scope of the existing single-admin web application. 
+
+Manages raw-material supplier profiles, tracks multi-season delivery quantities, and generates long-term year-over-year volume trend analytics.
+
+## 2. Functional Requirements
+* **Requirement 2.1.1:** The system must provide an isolated administrative section to register, track, update, and manage profiles for third-party paddy suppliers and farmers.
+* **Requirement 2.1.2:** The supplier schema registry must store the following persistent metadata variables: Unique Supplier ID (system-generated), Full Legal Name, Primary Contact Number, Village / Regional Location, and System Onboarding Timestamp.
+
+#### 2.2 Seasonal Quantity Delivery Logs (Quantity-Only)
+* **Requirement 2.2.1:** Because paddy suppliers typically deliver crops on a highly cyclical basis (**1 to 3 delivery events per calendar year** during peak harvest periods), the module must expose a touch-optimized "Quick Log" form to record entries in seconds.
+* **Requirement 2.2.2:** Each entry record must enforce the collection of three parameters exclusively:
+    * **Delivery Date:** System calendar date selector (defaults natively to current timezone date).
+    * **Paddy Variety/Classification:** Interactive selection matching regional crop types (e.g., `Ranjit`, `Goya`, `Mota`, or a custom text entry).
+    * **Net Payload Weight:** Manual numeric field logging weight metrics via standard industrial volumes (**Quintals** or Kilograms).
+* **Requirement 2.2.3:** **No rates, unit pricing parameters, or monetary transaction values shall be collected or calculated within this module.** Quantity volume is the sole baseline metric for tracking, reporting, and evaluating supplier deliveries.
+
+#### 2.3 Dynamic Procurement Analytics Dashboard
+* **Requirement 2.3.1:** The landing pane of this module must display real-time summary indicators calculating metrics for the active calendar year:
+    * *Total Combined Volume:* Sum weight of all raw paddy varieties accepted across the complete supplier network for the current year (displayed clearly in Quintals).
+* **Requirement 2.3.2:** Selecting any unique supplier file must instantly display a localized summary subtotal of their active delivery frequencies (e.g., *"Supplier Name: 2 Deliveries, Cumulative Weight: 145.50 Quintals, Active Cycle: 2026"*).
+
+#### 2.4 Year-over-Year Historical Comparison Engine
+* **Requirement 2.4.1:** Individual supplier profiles must render a **Year-over-Year Historical Comparison Panel** to evaluate structural shifts in supply consistency over prior calendar years.
+* **Requirement 2.4.2 (Historical Grid Layout):** The interface must format multi-year procurement variables inside a clean chronological matrix grouping transactions by complete calendar years, focusing purely on quantities:
+
+| Calendar Year | Deliveries Processed | Aggregate Weight (Quintals) | Y-o-Y Volume Variance (%) |
+| :--- | :---: | :---: | :---: |
+| **2026 (Active)** | 2 | 145.50 | + 11.9% ▲ |
+| **2025** | 3 | 130.00 | - 5.1% ▼ |
+| **2024** | 2 | 137.00 | Baseline Baseline |
+
+* **Requirement 2.4.3 (Trend Analysis Index):** The interface engine must compute and display an absolute trend variance metric mapping current year weights directly against the immediate previous year's total:
+    
+    $$\text{Supply Variance \%} = \left( \frac{\text{Current Year Cumulative Weight} - \text{Prior Year Cumulative Weight}}{\text{Prior Year Cumulative Weight}} \right) \times 100$$
+
+
+
+# 3. Additional
 1. Create a seperate tab to see an employee monthly log listed on daily basis
 2. Any changes to the database, keep log of it with old and new vlaue along with data and on the right sidebar should display the logs
+

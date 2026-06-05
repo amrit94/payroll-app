@@ -13,6 +13,7 @@ import EmployeeRegistryView from './components/EmployeeRegistryView';
 import CashAdvancesLedgerView from './components/CashAdvancesLedgerView';
 import MonthlySummaryView from './components/MonthlySummaryView';
 import EmployeeDailyLogsView from './components/EmployeeDailyLogsView';
+import PaddyVendorsView from './components/PaddyVendorsView';
 import ActivitySidebar from './components/ActivitySidebar';
 import { 
   AddEmployeeModal, 
@@ -22,19 +23,23 @@ import {
 } from './components/Modals';
 export default function App() {
   // Navigation & Date contexts
-  const getTabFromHash = (): 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' => {
+  const getTabFromHash = (): 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' | 'paddy_vendors' | 'paddy_compare' => {
     const hash = window.location.hash.replace('#/', '');
-    if (['dashboard', 'attendance', 'employees', 'advances', 'reports', 'emp_reports'].includes(hash)) {
-      return hash as any;
+    const cleanTab = hash.split('?')[0];
+    if (['dashboard', 'attendance', 'employees', 'advances', 'reports', 'emp_reports', 'paddy_vendors', 'paddy_compare'].includes(cleanTab)) {
+      return cleanTab as any;
     }
     return 'dashboard';
   };
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports'>(getTabFromHash());
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' | 'paddy_vendors' | 'paddy_compare'>(getTabFromHash());
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    window.location.hash = `#/${activeTab}`;
+    const cleanHash = window.location.hash.replace('#/', '').split('?')[0];
+    if (cleanHash !== activeTab) {
+      window.location.hash = `#/${activeTab}`;
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -606,6 +611,16 @@ export default function App() {
             employeeReport={employeeReport}
             handleExportEmployeeExcel={handleExportEmployeeExcel}
             handleExportEmployeePdf={handleExportEmployeePdf}
+          />
+        )}
+
+        {/* 7. PADDY PROCUREMENT & SUPPLIER MANAGEMENT */}
+        {(activeTab === 'paddy_vendors' || activeTab === 'paddy_compare') && (
+          <PaddyVendorsView 
+            isCompareMode={activeTab === 'paddy_compare'}
+            onToggleCompareMode={(compare) => setActiveTab(compare ? 'paddy_compare' : 'paddy_vendors')}
+            addMutationLog={addMutationLog}
+            showToast={showToast}
           />
         )}
 

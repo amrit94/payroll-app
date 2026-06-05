@@ -24,7 +24,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
 echo "=========================================================="
-  echo " Payroll Management System Launch Control"
+echo "Payroll Management System Launch Control"
 echo "=========================================================="
 
 # 1. Start Backend FastAPI Server
