@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { AlertTriangle, Check } from 'lucide-react';
+import { AlertTriangle, Check, RefreshCw } from 'lucide-react';
 import { API_BASE_URL } from './config';
 // Import Types
 import type { Employee, Attendance, CashAdvanceDetail, MonthlySummary, ActivityLog } from './types';
 
 // Import Components
+import LoginView from './components/LoginView';
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
 import AttendanceLedgerView from './components/AttendanceLedgerView';
@@ -22,6 +23,49 @@ import {
   AddAdvanceModal 
 } from './components/Modals';
 export default function App() {
+  // Auth state
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(!!localStorage.getItem('token'));
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (token) {
+        try {
+          const res = await axios.get(`${API_BASE_URL}/api/auth/me`);
+          setCurrentUser(res.data);
+        } catch (err) {
+          console.error('Session validation failed', err);
+          handleLogout();
+        } finally {
+          setAuthLoading(false);
+        }
+      } else {
+        setAuthLoading(false);
+      }
+    };
+    checkAuth();
+  }, [token]);
+
+  useEffect(() => {
+    const handleAuthError = () => {
+      handleLogout();
+    };
+    window.addEventListener('auth_error', handleAuthError);
+    return () => window.removeEventListener('auth_error', handleAuthError);
+  }, []);
+
+  const handleLoginSuccess = (newToken: string) => {
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setCurrentUser(null);
+  };
+
   // Navigation & Date contexts
   const getTabFromHash = (): 'dashboard' | 'attendance' | 'employees' | 'advances' | 'reports' | 'emp_reports' | 'paddy_vendors' | 'paddy_compare' => {
     const hash = window.location.hash.replace('#/', '');
@@ -495,6 +539,19 @@ export default function App() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#090b10] text-slate-400 gap-4">
+        <RefreshCw className="h-10 w-10 animate-spin text-amber-500" />
+        <p className="text-sm font-semibold tracking-wide">Validating gateway credentials...</p>
+      </div>
+    );
+  }
+
+  if (!token || !currentUser) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#080b11] text-slate-100 font-sans">
       
@@ -507,6 +564,8 @@ export default function App() {
         selectedMonth={selectedMonth}
         setSelectedMonth={setSelectedMonth}
         isCycleLocked={isCycleLocked}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* MAIN CONTAINER */}

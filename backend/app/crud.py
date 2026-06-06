@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 from . import models, schemas
 from fastapi import HTTPException, status
@@ -564,3 +564,51 @@ def get_paddy_supplier_yoy_report(db: Session, supplier_db_id: int) -> schemas.P
         active_cumulative_weight=active_weight,
         yoy_grid=yoy_grid
     )
+
+
+def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.email == email.lower().strip()).first()
+
+
+def create_user(db: Session, email: str) -> models.User:
+    db_user = models.User(email=email.lower().strip())
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def create_otp(db: Session, email: str, otp: str, expires_in_minutes: int = 10) -> models.OTPVerification:
+    # Delete old unverified OTPs for this email to prevent bloat
+    db.query(models.OTPVerification).filter(
+        models.OTPVerification.email == email.lower().strip(),
+        models.OTPVerification.is_verified == False
+    ).delete()
+    
+    expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
+    db_otp = models.OTPVerification(
+        email=email.lower().strip(),
+        otp=otp,
+        expires_at=expires_at
+    )
+    db.add(db_otp)
+    db.commit()
+    db.refresh(db_otp)
+    return db_otp
+
+
+def verify_otp(db: Session, email: str, otp: str) -> bool:
+    # Find active, unexpired, matching OTP
+    db_otp = db.query(models.OTPVerification).filter(
+        models.OTPVerification.email == email.lower().strip(),
+        models.OTPVerification.otp == otp,
+        models.OTPVerification.expires_at > datetime.utcnow(),
+        models.OTPVerification.is_verified == False
+    ).first()
+    
+    if db_otp:
+        db_otp.is_verified = True
+        db.commit()
+        return True
+    return False
+

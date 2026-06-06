@@ -128,10 +128,6 @@ export default function PaddyVendorsView({
     try {
       const res = await axios.get(`${API_BASE_URL}/api/paddy/suppliers`);
       setSuppliers(res.data);
-      // Auto-select first supplier if list has entries and none selected
-      if (res.data.length > 0 && !selectedSupplierId) {
-        setSelectedSupplierId(res.data[0].id);
-      }
     } catch (err: any) {
       showToast(err.response?.data?.detail || 'Failed to fetch supplier registry', true);
     } finally {
@@ -403,7 +399,7 @@ export default function PaddyVendorsView({
       } else {
         setSelectedSupplierId(null);
       }
-    } else if (sortedSuppliers.length > 0 && !sortedSuppliers.some(s => s.id === selectedSupplierId)) {
+    } else if (sortedSuppliers.length > 0 && (selectedSupplierId === null || !sortedSuppliers.some(s => s.id === selectedSupplierId))) {
       setSelectedSupplierId(sortedSuppliers[0].id);
     } else if (sortedSuppliers.length === 0 && selectedSupplierId !== null) {
       setSelectedSupplierId(null);

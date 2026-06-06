@@ -11,7 +11,8 @@ import {
   ClipboardList, 
   Lock, 
   Unlock,
-  Wheat
+  Wheat,
+  LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -22,6 +23,8 @@ interface SidebarProps {
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   isCycleLocked: boolean;
+  currentUser: any;
+  onLogout: () => void;
 }
 
 export default function Sidebar({
@@ -32,6 +35,8 @@ export default function Sidebar({
   selectedMonth,
   setSelectedMonth,
   isCycleLocked,
+  currentUser,
+  onLogout,
 }: SidebarProps) {
   return (
     <aside className="w-full md:w-68 md:h-screen md:sticky md:top-0 bg-[#0d121f] border-b md:border-b-0 md:border-r border-slate-800 flex flex-col">
@@ -169,6 +174,30 @@ export default function Sidebar({
             )}
           </div>
         </div>
+
+        {currentUser && (
+          <div className="p-4 border-t border-slate-800 bg-[#090b10] flex flex-col gap-2">
+            <div className="flex items-center space-x-2.5">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-amber-500 flex items-center justify-center text-xs font-bold text-white uppercase shadow-md shadow-indigo-950/40">
+                {currentUser.email.substring(0, 2)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Active Manager</p>
+                <p className="text-xs text-slate-300 font-semibold truncate" title={currentUser.email}>
+                  {currentUser.email}
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={onLogout}
+              className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-slate-900 hover:bg-rose-950/20 border border-slate-800 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 rounded-xl transition-all duration-200 text-xs font-semibold min-h-[36px]"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out Gateway</span>
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

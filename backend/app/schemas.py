@@ -242,3 +242,31 @@ class PaddySupplierYoYReport(BaseModel):
 class PaddyProcurementAnalytics(BaseModel):
     active_year: int
     total_combined_volume: float # Total weight accepted across all suppliers for current year
+
+
+class OTPRequest(BaseModel):
+    email: str = Field(..., description="Email address to request OTP for")
+
+
+class OTPVerify(BaseModel):
+    email: str = Field(..., description="Email address associated with the OTP")
+    otp: str = Field(..., description="6-digit verification code")
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+

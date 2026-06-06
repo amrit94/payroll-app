@@ -1,10 +1,22 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, Query
+import sys
+import random
+import urllib.request
+import json
+import logging
+from datetime import date, datetime, timedelta
+from typing import List, Optional
+
+import jwt
+from fastapi import FastAPI, Depends, HTTPException, status, Query, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import date, datetime
-from typing import List, Optional
+
+# Resolve parent directory in search path to import config module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config as backend_config
 
 from .database import engine, Base, get_db, SessionLocal
 from . import models, schemas, crud, report_generator
@@ -91,14 +103,166 @@ else:
     )
 
 
+# --- JWT AUTHENTICATION SETTINGS & HELPER FUNCTIONS ---
+SECRET_KEY = backend_config.JWT_SECRET
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+
+security = HTTPBearer(auto_error=False)
+logger = logging.getLogger("uvicorn.error")
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), db: Session = Depends(get_db)) -> models.User:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        token_data = schemas.TokenData(email=email)
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token or token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = crud.get_user_by_email(db, email=token_data.email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account does not exist",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+# Define the protected routes router
+api_router = APIRouter(dependencies=[Depends(get_current_user)])
+
+
+# --- MSG91 EMAIL OTP SENDER HELPER ---
+def send_otp_email(email: str, otp: str):
+    auth_key = backend_config.MSG91_AUTH_KEY
+    email_from = backend_config.MSG91_EMAIL_FROM
+    email_domain = backend_config.MSG91_EMAIL_DOMAIN
+    template_id = backend_config.MSG91_TEMPLATE_ID
+    
+    # Check if MSG91 is properly configured
+    if not auth_key:
+        # Development fallback mode
+        logger.info(f"\n============================================\n*** [DEV MODE OTP] Send OTP to: {email} -> {otp} ***\n============================================\n")
+        return True
+        
+    # Standard modern MSG91 API Payload
+    url = "https://control.msg91.com/api/v5/email/send"
+    
+    # Extract domain from from_email if domain is not set explicitly
+    if not email_domain and "@" in email_from:
+        email_domain = email_from.split("@")[1]
+        
+    payload = {
+        "recipients": [
+            {
+                "to": [{"email": email}],
+                "variables": {"otp": otp}
+            }
+        ],
+        "from": {
+            "name": "Payroll Management",
+            "email": email_from
+        },
+        "domain": email_domain,
+        "template_id": template_id
+    }
+    
+    headers = {
+        "Content-Type": "application/json",
+        "authkey": auth_key
+    }
+    
+    try:
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode("utf-8"), 
+            headers=headers, 
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_body = response.read().decode("utf-8")
+            logger.info(f"MSG91 Email API Response: {res_body}")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to send email OTP via MSG91 API: {str(e)}")
+        # Print fallback to console so developers/users don't get locked out
+        logger.info(f"\n============================================\n*** [FALLBACK MODE OTP] Send OTP to: {email} -> {otp} (Msg91 Error) ***\n============================================\n")
+        return True
+
+
+# --- AUTHENTICATION API ROUTES ---
+
+@app.post("/api/auth/otp/request")
+def request_otp(payload: schemas.OTPRequest, db: Session = Depends(get_db)):
+    """Generate a 6-digit OTP and send it via email (Msg91)."""
+    otp = f"{random.randint(100000, 999999)}"
+    
+    # Store OTP in DB
+    crud.create_otp(db, email=payload.email, otp=otp)
+    
+    # Send email
+    send_otp_email(payload.email, otp)
+    
+    return {"message": "OTP sent successfully"}
+
+
+@app.post("/api/auth/otp/verify", response_model=schemas.Token)
+def verify_otp(payload: schemas.OTPVerify, db: Session = Depends(get_db)):
+    """Verify OTP and return a JWT access token."""
+    is_valid = crud.verify_otp(db, email=payload.email, otp=payload.otp)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP"
+        )
+    
+    # Create user if not exists (self-registration)
+    db_user = crud.get_user_by_email(db, email=payload.email)
+    if not db_user:
+        db_user = crud.create_user(db, email=payload.email)
+        
+    # Generate token
+    access_token = create_access_token(data={"sub": db_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/api/auth/me", response_model=schemas.UserOut)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    """Return the authenticated user's profile info."""
+    return current_user
+
+
 # --- EMPLOYEE API ROUTES ---
 
-@app.get("/api/employees", response_model=List[schemas.EmployeeOut])
+@api_router.get("/api/employees", response_model=List[schemas.EmployeeOut])
 def get_employees(active_only: bool = False, db: Session = Depends(get_db)):
     """Retrieve all employees registered in the system."""
     return crud.get_employees(db, active_only=active_only)
 
-@app.post("/api/employees", response_model=schemas.EmployeeOut, status_code=status.HTTP_201_CREATED)
+@api_router.post("/api/employees", response_model=schemas.EmployeeOut, status_code=status.HTTP_201_CREATED)
 def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
     """Create a new employee profile with an alphanumeric ID."""
     db_emp = crud.get_employee_by_uuid(db, employee.employee_id)
@@ -109,7 +273,7 @@ def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_
         )
     return crud.create_employee(db, employee)
 
-@app.put("/api/employees/{employee_id}", response_model=schemas.EmployeeOut)
+@api_router.put("/api/employees/{employee_id}", response_model=schemas.EmployeeOut)
 def update_employee(employee_id: int, employee: schemas.EmployeeUpdate, db: Session = Depends(get_db)):
     """Update employee configuration parameters (hourly rate, name, status)."""
     db_emp = crud.update_employee(db, employee_id, employee)
@@ -120,7 +284,7 @@ def update_employee(employee_id: int, employee: schemas.EmployeeUpdate, db: Sess
 
 # --- ATTENDANCE LEDGER API ROUTES ---
 
-@app.get("/api/attendance", response_model=List[schemas.AttendanceDetailOut])
+@api_router.get("/api/attendance", response_model=List[schemas.AttendanceDetailOut])
 def get_attendance(date_str: Optional[str] = None, db: Session = Depends(get_db)):
     """Get all attendance and extra work items logged for a specific date (YYYY-MM-DD)."""
     if not date_str:
@@ -158,17 +322,17 @@ def get_attendance(date_str: Optional[str] = None, db: Session = Depends(get_db)
             
     return results
 
-@app.post("/api/attendance", response_model=schemas.AttendanceOut)
+@api_router.post("/api/attendance", response_model=schemas.AttendanceOut)
 def log_attendance(attendance: schemas.AttendanceCreate, db: Session = Depends(get_db)):
     """Record hours worked for an employee. Updates state to Present if hours > 0, else Absent."""
     return crud.log_attendance(db, attendance)
 
-@app.post("/api/attendance/{attendance_id}/extra-work", response_model=schemas.ExtraWorkOut)
+@api_router.post("/api/attendance/{attendance_id}/extra-work", response_model=schemas.ExtraWorkOut)
 def add_extra_work(attendance_id: int, extra_work: schemas.ExtraWorkCreate, db: Session = Depends(get_db)):
     """Append a flat-rate task extension (Husk Packing, Rice Delivery, Paddy, Custom) to a present log."""
     return crud.create_extra_work(db, attendance_id, extra_work)
 
-@app.delete("/api/attendance/extra-work/{extra_work_id}")
+@api_router.delete("/api/attendance/extra-work/{extra_work_id}")
 def delete_extra_work(extra_work_id: int, db: Session = Depends(get_db)):
     """Remove an extra work task allocation."""
     crud.delete_extra_work(db, extra_work_id)
@@ -177,17 +341,17 @@ def delete_extra_work(extra_work_id: int, db: Session = Depends(get_db)):
 
 # --- CASH ADVANCE API ROUTES ---
 
-@app.get("/api/advances", response_model=List[schemas.CashAdvanceDetailOut])
+@api_router.get("/api/advances", response_model=List[schemas.CashAdvanceDetailOut])
 def get_advances(month: str = Query(..., description="Format YYYY-MM"), db: Session = Depends(get_db)):
     """Retrieve all cash advances issued during the active calendar cycle."""
     return crud.get_advances_by_month(db, month)
 
-@app.post("/api/advances", response_model=schemas.CashAdvanceOut)
+@api_router.post("/api/advances", response_model=schemas.CashAdvanceOut)
 def create_cash_advance(advance: schemas.CashAdvanceCreate, db: Session = Depends(get_db)):
     """Record a cash loan or payroll advance."""
     return crud.create_cash_advance(db, advance)
 
-@app.delete("/api/advances/{advance_id}")
+@api_router.delete("/api/advances/{advance_id}")
 def delete_cash_advance(advance_id: int, db: Session = Depends(get_db)):
     """Void a cash advance record."""
     crud.delete_cash_advance(db, advance_id)
@@ -196,12 +360,12 @@ def delete_cash_advance(advance_id: int, db: Session = Depends(get_db)):
 
 # --- PAYROLL CYCLE & LOCKING API ROUTES ---
 
-@app.get("/api/cycles", response_model=List[schemas.PayrollCycleOut])
+@api_router.get("/api/cycles", response_model=List[schemas.PayrollCycleOut])
 def get_cycles(db: Session = Depends(get_db)):
     """Get all payroll cycles and lock states."""
     return db.query(models.PayrollCycle).all()
 
-@app.get("/api/cycles/{month}", response_model=schemas.PayrollCycleOut)
+@api_router.get("/api/cycles/{month}", response_model=schemas.PayrollCycleOut)
 def get_cycle(month: str, db: Session = Depends(get_db)):
     """Check lock status of a specific calendar month cycle."""
     cycle = crud.get_payroll_cycle(db, month)
@@ -209,7 +373,7 @@ def get_cycle(month: str, db: Session = Depends(get_db)):
         return schemas.PayrollCycleOut(month=month, id=0, is_locked=False, locked_at=None)
     return cycle
 
-@app.post("/api/cycles/lock", response_model=schemas.PayrollCycleOut)
+@api_router.post("/api/cycles/lock", response_model=schemas.PayrollCycleOut)
 def lock_payroll_cycle(lock_data: schemas.PayrollCycleLock, db: Session = Depends(get_db)):
     """Hard-lock a monthly cycle. All entries within this month become immutable."""
     return crud.create_or_lock_payroll_cycle(db, lock_data.month)
@@ -217,12 +381,12 @@ def lock_payroll_cycle(lock_data: schemas.PayrollCycleLock, db: Session = Depend
 
 # --- REPORTING & EXPORT API ROUTES ---
 
-@app.get("/api/reports/summary", response_model=schemas.MonthlySummaryResponse)
+@api_router.get("/api/reports/summary", response_model=schemas.MonthlySummaryResponse)
 def get_monthly_summary(month: str = Query(..., description="Format YYYY-MM"), db: Session = Depends(get_db)):
     """Compile aggregated payroll data metrics for a calendar month."""
     return crud.get_monthly_summary(db, month)
 
-@app.get("/api/reports/excel")
+@api_router.get("/api/reports/excel")
 def export_excel(month: str = Query(..., description="Format YYYY-MM"), db: Session = Depends(get_db)):
     """Generate and stream a styled Excel ledger sheet."""
     summary = crud.get_monthly_summary(db, month)
@@ -235,7 +399,7 @@ def export_excel(month: str = Query(..., description="Format YYYY-MM"), db: Sess
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-@app.get("/api/reports/pdf")
+@api_router.get("/api/reports/pdf")
 def export_pdf(month: str = Query(..., description="Format YYYY-MM"), db: Session = Depends(get_db)):
     """Generate and stream print-ready accounting vouchers and summary registers."""
     summary = crud.get_monthly_summary(db, month)
@@ -249,7 +413,7 @@ def export_pdf(month: str = Query(..., description="Format YYYY-MM"), db: Sessio
     )
 
 
-@app.get("/api/employees/{employee_id}/attendance", response_model=schemas.EmployeeMonthlyReportResponse)
+@api_router.get("/api/employees/{employee_id}/attendance", response_model=schemas.EmployeeMonthlyReportResponse)
 def get_employee_monthly_attendance_report(
     employee_id: int, 
     month: str = Query(..., description="Format YYYY-MM"), 
@@ -371,7 +535,7 @@ def get_employee_monthly_attendance_report(
     )
 
 
-@app.get("/api/employees/{employee_id}/attendance/excel")
+@api_router.get("/api/employees/{employee_id}/attendance/excel")
 def export_employee_excel_report(
     employee_id: int, 
     month: str = Query(..., description="Format YYYY-MM"), 
@@ -389,7 +553,7 @@ def export_employee_excel_report(
     )
 
 
-@app.get("/api/employees/{employee_id}/attendance/pdf")
+@api_router.get("/api/employees/{employee_id}/attendance/pdf")
 def export_employee_pdf_report(
     employee_id: int, 
     month: str = Query(..., description="Format YYYY-MM"), 
@@ -409,12 +573,12 @@ def export_employee_pdf_report(
 
 # --- AUDIT LOGS API ROUTES ---
 
-@app.get("/api/audit-logs", response_model=List[schemas.AuditLogOut])
+@api_router.get("/api/audit-logs", response_model=List[schemas.AuditLogOut])
 def get_audit_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
     """Retrieve database mutation audit logs."""
     return crud.get_audit_logs(db, skip=skip, limit=limit)
 
-@app.delete("/api/audit-logs")
+@api_router.delete("/api/audit-logs")
 def clear_audit_logs(db: Session = Depends(get_db)):
     """Clear all database mutation audit logs."""
     crud.clear_audit_logs(db)
@@ -423,12 +587,12 @@ def clear_audit_logs(db: Session = Depends(get_db)):
 
 # --- PADDY SUPPLIER & PROCUREMENT API ROUTES ---
 
-@app.get("/api/paddy/suppliers", response_model=List[schemas.PaddySupplierDetailOut])
+@api_router.get("/api/paddy/suppliers", response_model=List[schemas.PaddySupplierDetailOut])
 def get_paddy_suppliers(db: Session = Depends(get_db)):
     """Retrieve all registered paddy suppliers."""
     return crud.get_paddy_suppliers(db)
 
-@app.get("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierDetailOut)
+@api_router.get("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierDetailOut)
 def get_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """Retrieve details for a specific paddy supplier, including deliveries."""
     db_supplier = crud.get_paddy_supplier(db, supplier_id)
@@ -436,12 +600,12 @@ def get_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Supplier not found")
     return db_supplier
 
-@app.post("/api/paddy/suppliers", response_model=schemas.PaddySupplierOut, status_code=status.HTTP_201_CREATED)
+@api_router.post("/api/paddy/suppliers", response_model=schemas.PaddySupplierOut, status_code=status.HTTP_201_CREATED)
 def create_paddy_supplier(supplier: schemas.PaddySupplierCreate, db: Session = Depends(get_db)):
     """Register a new paddy supplier."""
     return crud.create_paddy_supplier(db, supplier)
 
-@app.put("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierOut)
+@api_router.put("/api/paddy/suppliers/{supplier_id}", response_model=schemas.PaddySupplierOut)
 def update_paddy_supplier(supplier_id: int, supplier: schemas.PaddySupplierUpdate, db: Session = Depends(get_db)):
     """Update details of a registered paddy supplier."""
     db_supplier = crud.update_paddy_supplier(db, supplier_id, supplier)
@@ -449,7 +613,7 @@ def update_paddy_supplier(supplier_id: int, supplier: schemas.PaddySupplierUpdat
         raise HTTPException(status_code=404, detail="Supplier not found")
     return db_supplier
 
-@app.delete("/api/paddy/suppliers/{supplier_id}")
+@api_router.delete("/api/paddy/suppliers/{supplier_id}")
 def delete_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """Deregister a paddy supplier and remove their profile."""
     success = crud.delete_paddy_supplier(db, supplier_id)
@@ -457,23 +621,26 @@ def delete_paddy_supplier(supplier_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Supplier not found")
     return {"message": "Supplier deregistered successfully"}
 
-@app.post("/api/paddy/suppliers/{supplier_id}/deliveries", response_model=schemas.PaddyDeliveryOut, status_code=status.HTTP_201_CREATED)
+@api_router.post("/api/paddy/suppliers/{supplier_id}/deliveries", response_model=schemas.PaddyDeliveryOut, status_code=status.HTTP_201_CREATED)
 def create_paddy_delivery(supplier_id: int, delivery: schemas.PaddyDeliveryCreate, db: Session = Depends(get_db)):
     """Log a seasonal crop delivery for a supplier (quantity-only)."""
     return crud.create_paddy_delivery(db, supplier_id, delivery)
 
-@app.delete("/api/paddy/deliveries/{delivery_id}")
+@api_router.delete("/api/paddy/deliveries/{delivery_id}")
 def delete_paddy_delivery(delivery_id: int, db: Session = Depends(get_db)):
     """Void or remove a recorded paddy crop delivery."""
     crud.delete_paddy_delivery(db, delivery_id)
     return {"message": "Delivery record removed successfully"}
 
-@app.get("/api/paddy/analytics", response_model=schemas.PaddyProcurementAnalytics)
+@api_router.get("/api/paddy/analytics", response_model=schemas.PaddyProcurementAnalytics)
 def get_paddy_procurement_analytics(db: Session = Depends(get_db)):
     """Compile real-time total volume statistics for the active year."""
     return crud.get_paddy_procurement_analytics(db)
 
-@app.get("/api/paddy/suppliers/{supplier_id}/yoy", response_model=schemas.PaddySupplierYoYReport)
+@api_router.get("/api/paddy/suppliers/{supplier_id}/yoy", response_model=schemas.PaddySupplierYoYReport)
 def get_paddy_supplier_yoy_report(supplier_id: int, db: Session = Depends(get_db)):
     """Generate the Year-over-Year Historical Comparison and Trend report for a supplier."""
     return crud.get_paddy_supplier_yoy_report(db, supplier_id)
+
+app.include_router(api_router)
+
