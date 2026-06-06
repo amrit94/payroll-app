@@ -48,6 +48,11 @@ VITE_API_BASE_URL=http://localhost:8000
    npm run build
    ```
 
+5.How to run: Build and preview the production bundle:
+   ```bash
+   npm run build
+   npm run preview
+   ```
 ---
 
 ## 🖥️ Modular Administrative Views

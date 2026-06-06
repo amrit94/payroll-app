@@ -1,11 +1,11 @@
 import os
 import sys
 import random
-import urllib.request
 import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import List, Optional
+import requests
 
 import jwt
 from fastapi import FastAPI, Depends, HTTPException, status, Query, APIRouter
@@ -79,7 +79,6 @@ if allowed_origins_env:
     for origin in allowed_origins_env.split(","):
         origins.append(origin.strip())
 
-print(origins)
 
 # Support wildcard override if specified
 if "*" in origins or backend_config.ALLOW_ALL_CORS == "true":
@@ -180,7 +179,6 @@ def send_otp_email(email: str, otp: str):
             }
         ],
         "from": {
-            "name": "Payroll Management",
             "email": email_from
         },
         "domain": email_domain,
@@ -188,21 +186,17 @@ def send_otp_email(email: str, otp: str):
     }
     
     headers = {
-        "Content-Type": "application/json",
+        'accept': 'application/json',
+        "Content-Type": "application/JSON",
         "authkey": auth_key
     }
     
     try:
-        req = urllib.request.Request(
-            url, 
-            data=json.dumps(payload).encode("utf-8"), 
-            headers=headers, 
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            res_body = response.read().decode("utf-8")
-            logger.info(f"MSG91 Email API Response: {res_body}")
-            return True
+        data = json.dumps(payload)
+        response = requests.post('https://control.msg91.com/api/v5/email/send', headers=headers, data=data, timeout=10)
+        logger.info(f"MSG91 Email API Response status: {response.status_code}, response: {response.text}")
+        response.raise_for_status()
+        return True
     except Exception as e:
         logger.error(f"Failed to send email OTP via MSG91 API: {str(e)}")
         # Print fallback to console so developers/users don't get locked out
@@ -215,6 +209,13 @@ def send_otp_email(email: str, otp: str):
 @app.post("/api/auth/otp/request")
 def request_otp(payload: schemas.OTPRequest, db: Session = Depends(get_db)):
     """Generate a 6-digit OTP and send it via email (Msg91)."""
+    allowed_emails = backend_config.ALLOWED_EMAILS.split(',')
+    if payload.email.lower() not in [email.strip().lower() for email in allowed_emails]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Only the authorized manager can request authentication."
+        )
+        
     otp = f"{random.randint(100000, 999999)}"
     
     # Store OTP in DB
@@ -229,6 +230,14 @@ def request_otp(payload: schemas.OTPRequest, db: Session = Depends(get_db)):
 @app.post("/api/auth/otp/verify", response_model=schemas.Token)
 def verify_otp(payload: schemas.OTPVerify, db: Session = Depends(get_db)):
     """Verify OTP and return a JWT access token."""
+    allowed_emails = backend_config.ALLOWED_EMAILS.split(',')
+
+    if payload.email.lower() not in [email.strip().lower() for email in allowed_emails]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Only the authorized manager can verify authentication."
+        )
+
     is_valid = crud.verify_otp(db, email=payload.email, otp=payload.otp)
     if not is_valid:
         raise HTTPException(

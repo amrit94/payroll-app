@@ -214,11 +214,13 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         )}
 
         {/* Developer Sandbox Banner */}
-        <div className="pt-2 border-t border-slate-900 text-center">
-          <p className="text-[10px] text-slate-500 leading-normal">
-            💡 <strong>Sandbox Tip:</strong> If MSG91 is not configured, check the backend terminal server console to retrieve the generated OTP code.
-          </p>
-        </div>
+        {import.meta.env.VITE_SERVER_MODE === 'dev' && (
+          <div className="pt-2 border-t border-slate-900 text-center">
+            <p className="text-[10px] text-slate-500 leading-normal">
+              💡 <strong>Sandbox Tip:</strong> If MSG91 is not configured, check the backend terminal server console to retrieve the generated OTP code.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

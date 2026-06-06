@@ -9,6 +9,7 @@ if MODE == 'dev':
     ALLOWED_ORIGINS = config('ALLOWED_ORIGINS_dev', '')
     ALLOW_ALL_CORS = config('ALLOW_ALL_CORS_dev', '')
     CORS_ORIGINS = config('CORS_ORIGINS_dev', '')
+    ALLOWED_EMAILS = config('ALLOWED_EMAILS_dev', '')
 else:
     MSG91_AUTH_KEY = config('MSG91_AUTH_KEY', '')
     MSG91_EMAIL_FROM = config('MSG91_EMAIL_FROM', '')
@@ -17,5 +18,6 @@ else:
     ALLOWED_ORIGINS = config('ALLOWED_ORIGINS', '')
     ALLOW_ALL_CORS = config('ALLOW_ALL_CORS', '')
     CORS_ORIGINS = config('CORS_ORIGINS', '')
+    ALLOWED_EMAILS = config('ALLOWED_EMAILS', '')
 
 JWT_SECRET = config('JWT_SECRET', '')
