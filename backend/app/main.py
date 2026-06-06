@@ -71,21 +71,18 @@ app = FastAPI(
 )
 
 # CORS Setup - Requirement 4.4.1
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://localhost:4173",
-]
+origins = [origin.strip() for origin in backend_config.CORS_ORIGINS.split(",") if origin.strip()]
 
 # Allow overriding/appending via environment variables
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+allowed_origins_env = backend_config.ALLOWED_ORIGINS
 if allowed_origins_env:
     for origin in allowed_origins_env.split(","):
         origins.append(origin.strip())
 
+print(origins)
+
 # Support wildcard override if specified
-if "*" in origins or os.getenv("ALLOW_ALL_CORS") == "true":
+if "*" in origins or backend_config.ALLOW_ALL_CORS == "true":
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -160,7 +157,7 @@ def send_otp_email(email: str, otp: str):
     auth_key = backend_config.MSG91_AUTH_KEY
     email_from = backend_config.MSG91_EMAIL_FROM
     email_domain = backend_config.MSG91_EMAIL_DOMAIN
-    template_id = backend_config.MSG91_TEMPLATE_ID
+    msg91_otp_template_id = "global_otp"
     
     # Check if MSG91 is properly configured
     if not auth_key:
@@ -187,7 +184,7 @@ def send_otp_email(email: str, otp: str):
             "email": email_from
         },
         "domain": email_domain,
-        "template_id": template_id
+        "template_id": msg91_otp_template_id
     }
     
     headers = {
