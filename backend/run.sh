@@ -4,10 +4,11 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
 echo "Setting up Python virtual environment..."
-/usr/bin/python3.12 -m venv venv
+cd ~/.virtualenvs/
+/usr/bin/python3.12 -m venv prmenv
 
 echo "Activating virtual environment..."
-source venv/bin/activate
+source ~/.virtualenvs/prmenv/bin/activate
 
 echo "Installing requirements..."
 pip install --upgrade pip

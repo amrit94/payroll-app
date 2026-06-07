@@ -14,7 +14,7 @@ else:
     MSG91_AUTH_KEY = config('MSG91_AUTH_KEY', '')
     MSG91_EMAIL_FROM = config('MSG91_EMAIL_FROM', '')
     MSG91_EMAIL_DOMAIN = config('MSG91_EMAIL_DOMAIN', '')
-    DATABASE_URL = config('DATABASE_URL', '')
+    DATABASE_URL = config('DATABASE_URL', 'sqlite:///./payroll.db')
     ALLOWED_ORIGINS = config('ALLOWED_ORIGINS', '')
     ALLOW_ALL_CORS = config('ALLOW_ALL_CORS', '')
     CORS_ORIGINS = config('CORS_ORIGINS', '')

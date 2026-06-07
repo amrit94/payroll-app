@@ -30,11 +30,13 @@ echo "=========================================================="
 # 1. Start Backend FastAPI Server
 echo ">>> Starting Backend FastAPI server..."
 cd "$DIR/backend"
-if [ ! -d "venv" ]; then
-  echo "Backend virtualenv not found. Running setup..."
-  /usr/bin/python3.12 -m venv venv
+if [ ! -d "$HOME/.virtualenvs/prmenv" ]; then
+  echo "Backend virtualenv not found in ~/.virtualenvs/prmenv. Running setup..."
+  mkdir -p "$HOME/.virtualenvs"
+  /usr/bin/python3.12 -m venv "$HOME/.virtualenvs/prmenv"
 fi
-source venv/bin/activate
+source "$HOME/.virtualenvs/prmenv/bin/activate"
+pip install --upgrade pip > /dev/null
 pip install -r requirements.txt > /dev/null
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
