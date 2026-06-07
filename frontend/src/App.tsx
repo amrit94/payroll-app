@@ -569,7 +569,7 @@ export default function App() {
       />
 
       {/* MAIN CONTAINER */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-6 md:p-8 md:ml-16 md:mr-16 lg:ml-0 lg:mr-0 overflow-y-auto">
         
         {/* TOAST ALERTS */}
         {errorMsg && (
